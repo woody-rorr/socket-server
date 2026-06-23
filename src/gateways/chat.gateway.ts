@@ -1,4 +1,4 @@
-import { Logger, UseGuards } from '@nestjs/common';
+import { Logger, Optional, UseGuards } from '@nestjs/common';
 import {
   ConnectedSocket,
   MessageBody,
@@ -12,11 +12,12 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { env } from '../config/env';
+import { RoomsService } from '../rooms/rooms.service';
 import { AuthedSocket, WsJwtGuard } from './ws-jwt.guard';
 
 @WebSocketGateway({
   cors: { origin: env.CORS_ORIGINS, credentials: true },
-  // 클라이언트가 path: '/socket.io' 기본값 사용. ALB rule에 '/socket.io/*' 매칭.
+  // 클라이언트가 path: '/socket.io' 기본값 사용.
 })
 export class ChatGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
@@ -24,7 +25,10 @@ export class ChatGateway
   private readonly logger = new Logger(ChatGateway.name);
   @WebSocketServer() server: Server;
 
-  constructor(private readonly auth: WsJwtGuard) {}
+  constructor(
+    private readonly auth: WsJwtGuard,
+    @Optional() private readonly roomsService: RoomsService | null,
+  ) {}
 
   afterInit(server: Server): void {
     this.logger.log(`Socket.io initialized (runtime=${env.RUNTIME})`);
@@ -55,12 +59,27 @@ export class ChatGateway
 
   @UseGuards(WsJwtGuard)
   @SubscribeMessage('room:join')
-  onJoinRoom(
+  async onJoinRoom(
     @ConnectedSocket() client: AuthedSocket,
     @MessageBody() body: { roomId?: string },
-  ): { ok: true; roomId: string } {
+  ): Promise<{ ok: true; roomId: string }> {
     if (!body?.roomId) throw new WsException({ code: 'INVALID_ROOM' });
+
+    // DB 연결이 있을 때: 방 존재 확인 + room_members upsert
+    if (this.roomsService) {
+      const exists = await this.roomsService.exists(body.roomId);
+      if (!exists) {
+        throw new WsException({ code: 'ROOM_NOT_FOUND', roomId: body.roomId });
+      }
+
+      await this.roomsService.upsertMember(body.roomId, {
+        user_id: client.data.userId,
+        role: 'member',
+      });
+    }
+
     client.join(`room:${body.roomId}`);
+    this.logger.log(`userId=${client.data.userId} joined room=${body.roomId}`);
     return { ok: true, roomId: body.roomId };
   }
 

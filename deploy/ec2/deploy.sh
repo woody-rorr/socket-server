@@ -41,6 +41,14 @@ RUNTIME=ec2
 GRACEFUL_SHUTDOWN_MS=60000
 CORS_ORIGINS=https://ai-dev-app.rorr.club
 JWT_SECRET=\$JWT_SECRET
+
+# Database — Aurora PostgreSQL
+DB_HOST=database-1.cluster-cwjiw4y08fiq.us-east-1.rds.amazonaws.com
+DB_PORT=5432
+DB_NAME=postgres
+DB_USER=postgres
+DB_PASSWORD=rorrService1!
+DB_SSL=true
 EOF
   chmod 600 /etc/socket-server.env
 '"

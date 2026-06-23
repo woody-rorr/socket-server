@@ -7,10 +7,9 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { cors: { origin: env.CORS_ORIGINS, credentials: true } });
   const logger = new Logger('Bootstrap');
 
-  // Graceful shutdown — ECS SIGTERM 또는 systemd stop 신호 대응.
-  // 1) 새 연결 차단 (ALB deregister는 인프라가 담당)
-  // 2) 기존 클라이언트에 "재연결 권고" 신호
-  // 3) GRACEFUL_SHUTDOWN_MS 대기 후 종료
+  // Graceful shutdown — systemd stop(SIGTERM) 대응
+  // 1) 기존 클라이언트에 재연결 권고 신호
+  // 2) GRACEFUL_SHUTDOWN_MS 대기 후 종료
   app.enableShutdownHooks();
 
   const server = await app.listen(env.PORT);
