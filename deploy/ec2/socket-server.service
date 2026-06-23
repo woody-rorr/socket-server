@@ -1,0 +1,21 @@
+[Unit]
+Description=rorr socket server (NestJS + socket.io)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/opt/socket-server
+EnvironmentFile=/etc/socket-server.env
+ExecStart=/usr/bin/node dist/main
+Restart=always
+RestartSec=3
+# graceful shutdown — main.ts SIGTERM 핸들러가 GRACEFUL_SHUTDOWN_MS 동안 정리.
+KillSignal=SIGTERM
+TimeoutStopSec=90
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

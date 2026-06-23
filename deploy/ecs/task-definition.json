@@ -1,0 +1,40 @@
+{
+  "family": "socket-server-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::239460481239:role/socket-server-execution",
+  "taskRoleArn": "arn:aws:iam::239460481239:role/socket-server-task",
+  "containerDefinitions": [
+    {
+      "name": "socket-server",
+      "image": "239460481239.dkr.ecr.us-east-1.amazonaws.com/socket-server:latest",
+      "essential": true,
+      "portMappings": [{ "containerPort": 5020, "protocol": "tcp" }],
+      "environment": [
+        { "name": "PORT", "value": "5020" },
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "RUNTIME", "value": "ecs" },
+        { "name": "GRACEFUL_SHUTDOWN_MS", "value": "60000" },
+        { "name": "CORS_ORIGINS", "value": "https://ai-dev-app.rorr.club" }
+      ],
+      "secrets": [
+        {
+          "name": "JWT_SECRET",
+          "valueFrom": "arn:aws:ssm:us-east-1:239460481239:parameter/socket-server/jwt-secret"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/socket-server",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      },
+      "stopTimeout": 90
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+name: Deploy (EC2)
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'src/**'
+      - 'package*.json'
+      - 'tsconfig.json'
+      - 'deploy/ec2/**'
+      - '.github/workflows/deploy-ec2.yml'
+  workflow_dispatch: {}
+
+env:
+  AWS_REGION: us-east-1
+  NODE_VERSION: '20'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Build
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: arn:aws:iam::239460481239:role/github-actions-deployer
+      - name: Setup SSH key
+        env:
+          SSH_KEY: ${{ secrets.SOCKET_EC2_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/socket-server.pem
+          chmod 600 ~/.ssh/socket-server.pem
+      - name: Deploy via deploy.sh
+        env:
+          SOCKET_EC2_HOST: ${{ secrets.SOCKET_EC2_HOST }}
+          SOCKET_EC2_SSH_KEY: /home/runner/.ssh/socket-server.pem
+        run: bash deploy/ec2/deploy.sh
