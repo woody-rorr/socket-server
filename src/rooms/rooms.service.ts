@@ -80,6 +80,12 @@ export class RoomsService {
     await this.memberRepo.remove(member);
   }
 
+  // disconnect 시 해당 유저가 속한 모든 room_members 삭제
+  async removeAllByUserId(userId: string): Promise<number> {
+    const result = await this.memberRepo.delete({ user_id: userId });
+    return result.affected ?? 0;
+  }
+
   /** room 존재 여부만 확인 (gateway용) */
   async exists(roomId: string): Promise<boolean> {
     const count = await this.roomRepo.count({ where: { id: roomId } });

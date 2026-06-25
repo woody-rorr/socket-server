@@ -75,6 +75,14 @@ export class ChatGateway
     this.logger.log(
       `disconnect ${client.id} userId=${userId ?? '-'} clientType=${clientType ?? '-'} channelId=${channelId ?? '-'}`,
     );
+
+    if (userId) {
+      this.roomsService.removeAllByUserId(userId)
+        .then((count) => {
+          if (count > 0) this.logger.log(`room_members 삭제 userId=${userId} count=${count}`);
+        })
+        .catch((err) => this.logger.warn(`room_members 삭제 실패 userId=${userId}: ${err.message}`));
+    }
   }
 
   // ── Channel broadcast ──────────────────────────────────────────────────────
