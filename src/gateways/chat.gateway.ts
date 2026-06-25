@@ -18,6 +18,12 @@ import { AuthedSocket, ClientType, WsJwtGuard } from './ws-jwt.guard';
 
 @WebSocketGateway({
   cors: { origin: env.CORS_ORIGINS, credentials: true },
+  // pingInterval: 서버가 클라이언트에게 ping을 보내는 주기 (ms)
+  // → 이 시간마다 연결이 살아있는지 확인 (keep-alive)
+  pingInterval: 25000,
+  // pingTimeout: ping 보낸 후 pong 응답 대기 시간 (ms)
+  // → 이 시간 안에 pong 없으면 연결 끊김으로 판단 → handleDisconnect 호출
+  pingTimeout: 20000,
 })
 export class ChatGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
