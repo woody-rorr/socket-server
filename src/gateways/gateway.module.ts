@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { env } from '../config/env';
-import { ChatGateway } from './chat.gateway';
+import { SocketGateway } from './socket.gateway';
 import { WsJwtGuard } from './ws-jwt.guard';
 import { RoomsModule } from '../rooms/rooms.module';
 import { ChannelsModule } from '../channels/channels.module';
@@ -12,6 +12,6 @@ import { ChannelsModule } from '../channels/channels.module';
     RoomsModule,
     ChannelsModule,
   ],
-  providers: [WsJwtGuard, ChatGateway],
+  providers: [WsJwtGuard, SocketGateway],
 })
 export class GatewayModule {}
