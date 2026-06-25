@@ -1,4 +1,4 @@
-import { Logger, Optional, UseGuards } from '@nestjs/common';
+import { Logger, UseGuards } from '@nestjs/common';
 import {
   ConnectedSocket,
   MessageBody,
@@ -27,8 +27,8 @@ export class ChatGateway
 
   constructor(
     private readonly auth: WsJwtGuard,
-    @Optional() private readonly roomsService: RoomsService | null,
-    @Optional() private readonly channelsService: ChannelsService | null,
+    private readonly roomsService: RoomsService,
+    private readonly channelsService: ChannelsService,
   ) {}
 
   afterInit(server: Server): void {
@@ -98,20 +98,17 @@ export class ChatGateway
   ): Promise<{ ok: true; roomId: string }> {
     if (!body?.roomId) throw new WsException({ code: 'INVALID_ROOM' });
 
-    if (this.roomsService) {
-      const room = await this.roomsService.findOne(body.roomId).catch(() => null);
-      if (!room) throw new WsException({ code: 'ROOM_NOT_FOUND', roomId: body.roomId });
+    const room = await this.roomsService.findOne(body.roomId).catch(() => null);
+    if (!room) throw new WsException({ code: 'ROOM_NOT_FOUND', roomId: body.roomId });
 
-      // 채널 소속 room이면 클라이언트가 같은 채널에 연결돼 있는지 검증
-      if (room.channel_id && room.channel_id !== client.data.channelId) {
-        throw new WsException({ code: 'CHANNEL_MISMATCH', roomId: body.roomId });
-      }
-
-      await this.roomsService.upsertMember(body.roomId, {
-        user_id: client.data.userId,
-        role: 'member',
-      });
+    if (room.channel_id && room.channel_id !== client.data.channelId) {
+      throw new WsException({ code: 'CHANNEL_MISMATCH', roomId: body.roomId });
     }
+
+    await this.roomsService.upsertMember(body.roomId, {
+      user_id: client.data.userId,
+      role: 'member',
+    });
 
     client.join(`room:${body.roomId}`);
     this.logger.log(

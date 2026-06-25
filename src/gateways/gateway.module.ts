@@ -6,12 +6,11 @@ import { WsJwtGuard } from './ws-jwt.guard';
 import { RoomsModule } from '../rooms/rooms.module';
 import { ChannelsModule } from '../channels/channels.module';
 
-const dbModules = env.DB_HOST ? [RoomsModule, ChannelsModule] : [];
-
 @Module({
   imports: [
     JwtModule.register({ secret: env.JWT_SECRET }),
-    ...dbModules,
+    RoomsModule,
+    ChannelsModule,
   ],
   providers: [WsJwtGuard, ChatGateway],
 })
