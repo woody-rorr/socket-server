@@ -25,10 +25,10 @@ import { AuthedSocket, ClientType, WsJwtGuard } from './ws-jwt.guard';
   // → 이 시간 안에 pong 없으면 연결 끊김으로 판단 → handleDisconnect 호출
   pingTimeout: 20000,
 })
-export class ChatGateway
+export class SocketGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
-  private readonly logger = new Logger(ChatGateway.name);
+  private readonly logger = new Logger(SocketGateway.name);
   @WebSocketServer() server: Server;
 
   constructor(
