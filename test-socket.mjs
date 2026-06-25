@@ -10,11 +10,29 @@
 import { io } from 'socket.io-client';
 import jwt from 'jsonwebtoken';
 
-const SERVER = 'http://localhost:5020';
+const SERVER = process.env.SERVER || 'http://localhost:5020';
 const SECRET = process.env.JWT_SECRET || 'test-secret';
+// EC2 테스트 시 실제 채널/룸 ID 지정 (없으면 DB 없는 로컬 모드로 동작)
+const TEST_CHANNEL_ID = process.env.TEST_CHANNEL_ID || '';
+const TEST_ROOM_ID = process.env.TEST_ROOM_ID || '';
 
-const makeToken = (userId, options = {}) =>
-  jwt.sign({ sub: userId, email: `${userId}@test.com` }, SECRET, { expiresIn: '1h', ...options });
+// userId는 UUID 형식이어야 함 — room_members.user_id 컬럼이 UUID 타입
+const USER_IDS = {
+  'user-a':         '00000000-0000-0000-0000-000000000001',
+  'user-b':         '00000000-0000-0000-0000-000000000002',
+  'user-ping':      '00000000-0000-0000-0000-000000000003',
+  'user-sender':    '00000000-0000-0000-0000-000000000004',
+  'user-receiver':  '00000000-0000-0000-0000-000000000005',
+  'user-outsider':  '00000000-0000-0000-0000-000000000006',
+  'user-web-1':     '00000000-0000-0000-0000-000000000007',
+  'user-web-2':     '00000000-0000-0000-0000-000000000008',
+  'user-overlay-1': '00000000-0000-0000-0000-000000000009',
+};
+
+const makeToken = (userId, options = {}) => {
+  const uuid = USER_IDS[userId] ?? userId;
+  return jwt.sign({ sub: uuid, email: `${userId}@test.com` }, SECRET, { expiresIn: '1h', ...options });
+};
 
 let passed = 0;
 let failed = 0;
@@ -35,17 +53,19 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 // 테스트 1: 연결 — 유효한 토큰 + clientType/channelId
 // ─────────────────────────────────────────────
 async function test1() {
-  console.log('\n[1] 연결 — 유효한 JWT 토큰 (clientType=web, channelId=ch-001)');
+  const channelId = TEST_CHANNEL_ID || 'ch-001';
+  console.log(`\n[1] 연결 — 유효한 JWT 토큰 (clientType=web, channelId=${channelId})`);
   const client = io(SERVER, {
-    auth: { token: makeToken('user-a'), clientType: 'web', channelId: 'ch-001' },
+    auth: { token: makeToken('user-a'), clientType: 'web', channelId },
     timeout: 4000,
   });
 
   await new Promise((resolve) => {
     let done = false;
+    const expectedUserId = USER_IDS['user-a'];
 
     client.on('connected', (data) => {
-      if (!done && data.userId === 'user-a' && data.clientType === 'web' && data.channelId === 'ch-001') {
+      if (!done && data.userId === expectedUserId && data.clientType === 'web' && data.channelId === channelId) {
         ok('connected 이벤트 수신, userId/clientType/channelId 일치');
         done = true;
       } else if (!done) {
@@ -92,32 +112,44 @@ async function test2() {
 
 // ─────────────────────────────────────────────
 // 테스트 3: Room join / leave
+// DB 없는 환경: 소켓 join 성공
+// DB 있는 환경: ROOM_NOT_FOUND → 에러 정상 수신 확인
 // ─────────────────────────────────────────────
 async function test3() {
-  console.log('\n[3] Room join / leave');
-  const client = await connect(makeToken('user-b'));
+  const roomId = TEST_ROOM_ID || 'room-abc';
+  const channelId = TEST_CHANNEL_ID || '';
+  console.log(`\n[3] Room join / leave (roomId=${roomId})`);
+
+  const client = io(SERVER, {
+    auth: { token: makeToken('user-b'), clientType: 'web', channelId },
+    timeout: 4000,
+  });
 
   await new Promise((resolve) => {
     client.on('connected', async () => {
-      // join
-      client.emit('room:join', { roomId: 'room-abc' }, (res) => {
-        if (res?.ok && res.roomId === 'room-abc') ok('room:join 성공');
-        else fail(`room:join 실패: ${JSON.stringify(res)}`);
+      let joinDone = false;
+
+      client.emit('room:join', { roomId }, (res) => {
+        joinDone = true;
+        if (res?.ok && res.roomId === roomId) {
+          ok('room:join 성공');
+          client.emit('room:leave', { roomId }, (r) => {
+            if (r?.ok) ok('room:leave 성공');
+            else fail(`room:leave 실패: ${JSON.stringify(r)}`);
+            client.disconnect();
+            resolve();
+          });
+        } else {
+          fail(`room:join 실패: ${JSON.stringify(res)}`);
+          client.disconnect();
+          resolve();
+        }
       });
 
-      await wait(300);
-
-      // leave
-      client.emit('room:leave', { roomId: 'room-abc' }, (res) => {
-        if (res?.ok) ok('room:leave 성공');
-        else fail(`room:leave 실패: ${JSON.stringify(res)}`);
-
-        client.disconnect();
-        resolve();
-      });
+      setTimeout(() => {
+        if (!joinDone) { fail('room:join/leave 타임아웃'); client.disconnect(); resolve(); }
+      }, 6000);
     });
-
-    setTimeout(() => { fail('room:join/leave 타임아웃'); client.disconnect(); resolve(); }, 4000);
   });
 }
 
@@ -125,11 +157,16 @@ async function test3() {
 // 테스트 4: 메시지 브로드캐스트
 // ─────────────────────────────────────────────
 async function test4() {
-  console.log('\n[4] 메시지 브로드캐스트');
-  const ROOM = 'broadcast-test-room';
-  const clientA = await connect(makeToken('user-sender'));
-  const clientB = await connect(makeToken('user-receiver'));
-  const clientC = await connect(makeToken('user-outsider'));  // room 미참여
+  const ROOM = TEST_ROOM_ID || 'broadcast-test-room';
+  const channelId = TEST_CHANNEL_ID || '';
+  console.log(`\n[4] 메시지 브로드캐스트 (roomId=${ROOM})`);
+
+  const mkClient = (userId) => io(SERVER, {
+    auth: { token: makeToken(userId), clientType: 'web', channelId }, timeout: 4000,
+  });
+  const clientA = mkClient('user-sender');
+  const clientB = mkClient('user-receiver');
+  const clientC = mkClient('user-outsider');
 
   await new Promise((resolve) => {
     let aReady = false, bReady = false;
@@ -164,8 +201,8 @@ async function test4() {
         bReady = true;
 
         clientB.on('room:message', (data) => {
-          if (data.text === 'hello' && data.from === 'user-sender') ok('B가 메시지 정상 수신');
-          else fail('B가 수신한 메시지 내용 불일치');
+          if (data.text === 'hello' && data.from === USER_IDS['user-sender']) ok('B가 메시지 정상 수신');
+          else fail(`B가 수신한 메시지 내용 불일치: ${JSON.stringify(data)}`);
         });
 
         tryBroadcast();

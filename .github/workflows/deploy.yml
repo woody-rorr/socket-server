@@ -3,9 +3,9 @@ name: deploy
 on:
   push:
     branches:
-      - dev        # → dev 환경
-      - staging    # → staging 환경
-      - main       # → prod 환경
+      - dev
+      - staging
+      - main
   workflow_dispatch:
     inputs:
       environment:
@@ -55,6 +55,27 @@ jobs:
             /tmp/socket-server-bundle.tgz \
             ${{ secrets.EC2_HOST }}:/tmp/socket-server-bundle.tgz
 
+      - name: Write env file on EC2
+        run: |
+          ssh -i ~/.ssh/deploy.pem \
+            -o StrictHostKeyChecking=accept-new \
+            ${{ secrets.EC2_HOST }} \
+            "sudo bash -c 'cat > /etc/socket-server.env << EOF
+          PORT=5020
+          NODE_ENV=${{ vars.NODE_ENV }}
+          RUNTIME=ec2
+          GRACEFUL_SHUTDOWN_MS=60000
+          CORS_ORIGINS=${{ vars.CORS_ORIGINS }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          DB_HOST=${{ secrets.DB_HOST }}
+          DB_PORT=5432
+          DB_NAME=postgres
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_SSL=true
+          EOF
+          chmod 600 /etc/socket-server.env'"
+
       - name: Deploy on EC2
         run: |
           ssh -i ~/.ssh/deploy.pem \
@@ -78,28 +99,6 @@ jobs:
             sudo systemctl is-active socket-server
             echo "==> Deploy complete"
           REMOTE
-
-      - name: Write env file on EC2
-        run: |
-          ssh -i ~/.ssh/deploy.pem \
-            -o StrictHostKeyChecking=accept-new \
-            ${{ secrets.EC2_HOST }} \
-            "sudo bash -c 'cat > /etc/socket-server.env << EOF
-          PORT=5020
-          NODE_ENV=${{ vars.NODE_ENV }}
-          RUNTIME=ec2
-          GRACEFUL_SHUTDOWN_MS=60000
-          CORS_ORIGINS=${{ vars.CORS_ORIGINS }}
-          JWT_SECRET=${{ secrets.JWT_SECRET }}
-          DB_HOST=${{ secrets.DB_HOST }}
-          DB_PORT=5432
-          DB_NAME=postgres
-          DB_USER=${{ secrets.DB_USER }}
-          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-          DB_SSL=true
-          EOF
-          chmod 600 /etc/socket-server.env
-          systemctl restart socket-server'"
 
       - name: Health check
         run: |

@@ -1,22 +1,10 @@
 import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
-import { env } from './config/env';
-import { ChatGateway } from './gateways/chat.gateway';
-import { WsJwtGuard } from './gateways/ws-jwt.guard';
 import { HealthController } from './health/health.controller';
 import { DatabaseModule } from './database/database.module';
-import { RoomsModule } from './rooms/rooms.module';
-import { ChannelsModule } from './channels/channels.module';
-
-// DB_HOST가 있을 때만 DB 연결 및 관련 모듈을 활성화한다.
-const dbModules = env.DB_HOST ? [DatabaseModule, ChannelsModule, RoomsModule] : [];
+import { GatewayModule } from './gateways/gateway.module';
 
 @Module({
-  imports: [
-    JwtModule.register({ secret: env.JWT_SECRET }),
-    ...dbModules,
-  ],
+  imports: [DatabaseModule, GatewayModule],
   controllers: [HealthController],
-  providers: [WsJwtGuard, ChatGateway],
 })
 export class AppModule {}

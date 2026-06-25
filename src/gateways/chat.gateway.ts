@@ -1,4 +1,4 @@
-import { Logger, Optional, UseGuards } from '@nestjs/common';
+import { Logger, UseGuards } from '@nestjs/common';
 import {
   ConnectedSocket,
   MessageBody,
@@ -18,6 +18,12 @@ import { AuthedSocket, ClientType, WsJwtGuard } from './ws-jwt.guard';
 
 @WebSocketGateway({
   cors: { origin: env.CORS_ORIGINS, credentials: true },
+  // pingInterval: 서버가 클라이언트에게 ping을 보내는 주기 (ms)
+  // → 이 시간마다 연결이 살아있는지 확인 (keep-alive)
+  pingInterval: 25000,
+  // pingTimeout: ping 보낸 후 pong 응답 대기 시간 (ms)
+  // → 이 시간 안에 pong 없으면 연결 끊김으로 판단 → handleDisconnect 호출
+  pingTimeout: 20000,
 })
 export class ChatGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
@@ -27,12 +33,14 @@ export class ChatGateway
 
   constructor(
     private readonly auth: WsJwtGuard,
-    @Optional() private readonly roomsService: RoomsService | null,
-    @Optional() private readonly channelsService: ChannelsService | null,
+    private readonly roomsService: RoomsService,
+    private readonly channelsService: ChannelsService,
   ) {}
 
   afterInit(server: Server): void {
     this.logger.log(`Socket.io initialized (runtime=${env.RUNTIME})`);
+    this.logger.log(`RoomsService injected: ${!!this.roomsService}`);
+    this.logger.log(`ChannelsService injected: ${!!this.channelsService}`);
     server.engine.on('connection_error', (err) => {
       this.logger.warn(`engine connection_error: ${err.code} ${err.message}`);
     });
@@ -73,6 +81,14 @@ export class ChatGateway
     this.logger.log(
       `disconnect ${client.id} userId=${userId ?? '-'} clientType=${clientType ?? '-'} channelId=${channelId ?? '-'}`,
     );
+
+    if (userId) {
+      this.roomsService.removeAllByUserId(userId)
+        .then((count) => {
+          if (count > 0) this.logger.log(`room_members 삭제 userId=${userId} count=${count}`);
+        })
+        .catch((err) => this.logger.warn(`room_members 삭제 실패 userId=${userId}: ${err.message}`));
+    }
   }
 
   // ── Channel broadcast ──────────────────────────────────────────────────────
@@ -96,20 +112,17 @@ export class ChatGateway
   ): Promise<{ ok: true; roomId: string }> {
     if (!body?.roomId) throw new WsException({ code: 'INVALID_ROOM' });
 
-    if (this.roomsService) {
-      const room = await this.roomsService.findOne(body.roomId).catch(() => null);
-      if (!room) throw new WsException({ code: 'ROOM_NOT_FOUND', roomId: body.roomId });
+    const room = await this.roomsService.findOne(body.roomId).catch(() => null);
+    if (!room) throw new WsException({ code: 'ROOM_NOT_FOUND', roomId: body.roomId });
 
-      // 채널 소속 room이면 클라이언트가 같은 채널에 연결돼 있는지 검증
-      if (room.channel_id && room.channel_id !== client.data.channelId) {
-        throw new WsException({ code: 'CHANNEL_MISMATCH', roomId: body.roomId });
-      }
-
-      await this.roomsService.upsertMember(body.roomId, {
-        user_id: client.data.userId,
-        role: 'member',
-      });
+    if (room.channel_id && room.channel_id !== client.data.channelId) {
+      throw new WsException({ code: 'CHANNEL_MISMATCH', roomId: body.roomId });
     }
+
+    await this.roomsService.upsertMember(body.roomId, {
+      user_id: client.data.userId,
+      role: 'member',
+    });
 
     client.join(`room:${body.roomId}`);
     this.logger.log(
