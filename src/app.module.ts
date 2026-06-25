@@ -17,6 +17,9 @@ const dbModules = env.DB_HOST ? [DatabaseModule, ChannelsModule, RoomsModule] : 
     ...dbModules,
   ],
   controllers: [HealthController],
+  // ChatGateway가 RoomsService/ChannelsService를 주입받으려면
+  // 같은 모듈 컨텍스트에서 provider로 등록돼야 한다.
+  // RoomsModule/ChannelsModule이 export하는 서비스를 AppModule이 import하면 주입 가능.
   providers: [WsJwtGuard, ChatGateway],
 })
 export class AppModule {}

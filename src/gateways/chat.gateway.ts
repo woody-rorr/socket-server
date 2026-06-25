@@ -33,6 +33,8 @@ export class ChatGateway
 
   afterInit(server: Server): void {
     this.logger.log(`Socket.io initialized (runtime=${env.RUNTIME})`);
+    this.logger.log(`RoomsService injected: ${!!this.roomsService}`);
+    this.logger.log(`ChannelsService injected: ${!!this.channelsService}`);
     server.engine.on('connection_error', (err) => {
       this.logger.warn(`engine connection_error: ${err.code} ${err.message}`);
     });
