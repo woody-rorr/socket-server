@@ -1,0 +1,87 @@
+name: deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: dev
+        type: choice
+        options: [dev]
+
+jobs:
+  deploy:
+    name: Deploy to EC2 (${{ inputs.environment || 'dev' }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'dev' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build
+        run: npm run build
+
+      - name: Bundle artifact
+        run: |
+          tar -czf /tmp/socket-server-bundle.tgz dist package.json package-lock.json
+          echo "Bundle size: $(du -sh /tmp/socket-server-bundle.tgz | cut -f1)"
+
+      - name: Write SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy.pem
+          chmod 600 ~/.ssh/deploy.pem
+
+      - name: Upload bundle to EC2
+        run: |
+          scp -i ~/.ssh/deploy.pem \
+            -o StrictHostKeyChecking=accept-new \
+            /tmp/socket-server-bundle.tgz \
+            ${{ secrets.EC2_HOST }}:/tmp/socket-server-bundle.tgz
+
+      - name: Deploy on EC2
+        run: |
+          ssh -i ~/.ssh/deploy.pem \
+            -o StrictHostKeyChecking=accept-new \
+            ${{ secrets.EC2_HOST }} \
+            "bash -s" << 'REMOTE'
+            set -euo pipefail
+            REMOTE_DIR=/opt/socket-server
+
+            sudo mkdir -p $REMOTE_DIR
+            sudo chown -R ec2-user:ec2-user $REMOTE_DIR
+
+            cd $REMOTE_DIR
+            tar -xzf /tmp/socket-server-bundle.tgz
+            rm /tmp/socket-server-bundle.tgz
+
+            npm install --omit=dev --no-audit --no-fund
+
+            sudo systemctl restart socket-server
+            sleep 3
+            sudo systemctl is-active socket-server
+            echo "==> Deploy complete"
+          REMOTE
+
+      - name: Health check
+        run: |
+          sleep 5
+          STATUS=$(curl -sf --max-time 10 \
+            "http://${{ secrets.EC2_HOST_IP }}:5020/health" \
+            -o /dev/null -w "%{http_code}" || echo "000")
+          echo "Health check status: $STATUS"
+          [ "$STATUS" = "200" ] && echo "OK" || (echo "FAIL" && exit 1)

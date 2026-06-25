@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { env } from '../config/env';
 import { Room } from '../rooms/room.entity';
 import { RoomMember } from '../rooms/room-member.entity';
+import { Channel } from '../channels/channel.entity';
 
 const logger = new Logger('DatabaseModule');
 
@@ -34,7 +35,7 @@ const logger = new Logger('DatabaseModule');
           username: env.DB_USER,
           password: env.DB_PASSWORD,
           ssl: env.DB_SSL ? { rejectUnauthorized: false } : false,
-          entities: [Room, RoomMember],
+          entities: [Channel, Room, RoomMember],
           synchronize: false,       // 테이블은 이미 생성돼 있으므로 false
           logging: env.NODE_ENV !== 'production',
           extra: {

@@ -3,8 +3,10 @@ import { JwtService } from '@nestjs/jwt';
 import { Socket } from 'socket.io';
 import { env } from '../config/env';
 
+export type ClientType = 'web' | 'overlay' | 'side';
+
 export interface AuthedSocket extends Socket {
-  data: { userId: string; email?: string };
+  data: { userId: string; email?: string; clientType: ClientType; channelId: string };
 }
 
 @Injectable()
@@ -18,7 +20,7 @@ export class WsJwtGuard implements CanActivate {
   }
 
   // 핸드셰이크 시 1회 호출 — gateway의 handleConnection에서 사용.
-  authenticate(client: Socket): { userId: string; email?: string } | null {
+  authenticate(client: Socket): { userId: string; email?: string; clientType: ClientType; channelId: string } | null {
     const token =
       (client.handshake.auth?.token as string) ||
       (client.handshake.query?.token as string) ||
@@ -26,7 +28,14 @@ export class WsJwtGuard implements CanActivate {
     if (!token) return null;
     try {
       const payload = this.jwt.verify(token, { secret: env.JWT_SECRET });
-      return { userId: payload.sub, email: payload.email };
+      const clientType: ClientType =
+        (['web', 'overlay', 'side'] as ClientType[]).includes(
+          client.handshake.auth?.clientType,
+        )
+          ? (client.handshake.auth.clientType as ClientType)
+          : 'web';
+      const channelId = (client.handshake.auth?.channelId as string) || '';
+      return { userId: payload.sub, email: payload.email, clientType, channelId };
     } catch (err) {
       this.logger.warn(`JWT verify failed: ${(err as Error).message}`);
       return null;

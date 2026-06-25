@@ -13,11 +13,11 @@ import {
 import { Server, Socket } from 'socket.io';
 import { env } from '../config/env';
 import { RoomsService } from '../rooms/rooms.service';
-import { AuthedSocket, WsJwtGuard } from './ws-jwt.guard';
+import { ChannelsService } from '../channels/channels.service';
+import { AuthedSocket, ClientType, WsJwtGuard } from './ws-jwt.guard';
 
 @WebSocketGateway({
   cors: { origin: env.CORS_ORIGINS, credentials: true },
-  // 클라이언트가 path: '/socket.io' 기본값 사용.
 })
 export class ChatGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
@@ -28,6 +28,7 @@ export class ChatGateway
   constructor(
     private readonly auth: WsJwtGuard,
     @Optional() private readonly roomsService: RoomsService | null,
+    @Optional() private readonly channelsService: ChannelsService | null,
   ) {}
 
   afterInit(server: Server): void {
@@ -46,17 +47,47 @@ export class ChatGateway
       return;
     }
     (client as AuthedSocket).data = identity;
-    // 사용자별 개인 채널 join — DM 라우팅용
+
+    // 사용자 개인 room — DM 라우팅용
     client.join(`user:${identity.userId}`);
-    this.logger.log(`connect ${client.id} userId=${identity.userId}`);
-    client.emit('connected', { userId: identity.userId, ts: Date.now() });
+
+    // 채널 room join — 전체 + clientType별 (web/overlay/side)
+    if (identity.channelId) {
+      client.join(`channel:${identity.channelId}`);
+      client.join(`channel:${identity.channelId}:${identity.clientType}`);
+    }
+
+    this.logger.log(
+      `connect ${client.id} userId=${identity.userId} clientType=${identity.clientType} channelId=${identity.channelId || '-'}`,
+    );
+    client.emit('connected', {
+      userId: identity.userId,
+      clientType: identity.clientType,
+      channelId: identity.channelId,
+      ts: Date.now(),
+    });
   }
 
   handleDisconnect(client: Socket): void {
-    const userId = (client as AuthedSocket).data?.userId;
-    this.logger.log(`disconnect ${client.id} userId=${userId ?? '-'}`);
+    const { userId, clientType, channelId } = (client as AuthedSocket).data ?? {};
+    this.logger.log(
+      `disconnect ${client.id} userId=${userId ?? '-'} clientType=${clientType ?? '-'} channelId=${channelId ?? '-'}`,
+    );
   }
 
+  // ── Channel broadcast ──────────────────────────────────────────────────────
+  // 외부(MSK consumer, 게임 이벤트 핸들러 등)에서 채널 전체 또는 clientType 지정 push
+  pushToChannel(channelId: string, event: string, payload: unknown, clientType?: ClientType): void {
+    const room = clientType ? `channel:${channelId}:${clientType}` : `channel:${channelId}`;
+    this.server.to(room).emit(event, payload);
+  }
+
+  // 특정 사용자에게 push (DM, 알림 등)
+  pushToUser(userId: string, event: string, payload: unknown): void {
+    this.server.to(`user:${userId}`).emit(event, payload);
+  }
+
+  // ── Room events ────────────────────────────────────────────────────────────
   @UseGuards(WsJwtGuard)
   @SubscribeMessage('room:join')
   async onJoinRoom(
@@ -65,11 +96,13 @@ export class ChatGateway
   ): Promise<{ ok: true; roomId: string }> {
     if (!body?.roomId) throw new WsException({ code: 'INVALID_ROOM' });
 
-    // DB 연결이 있을 때: 방 존재 확인 + room_members upsert
     if (this.roomsService) {
-      const exists = await this.roomsService.exists(body.roomId);
-      if (!exists) {
-        throw new WsException({ code: 'ROOM_NOT_FOUND', roomId: body.roomId });
+      const room = await this.roomsService.findOne(body.roomId).catch(() => null);
+      if (!room) throw new WsException({ code: 'ROOM_NOT_FOUND', roomId: body.roomId });
+
+      // 채널 소속 room이면 클라이언트가 같은 채널에 연결돼 있는지 검증
+      if (room.channel_id && room.channel_id !== client.data.channelId) {
+        throw new WsException({ code: 'CHANNEL_MISMATCH', roomId: body.roomId });
       }
 
       await this.roomsService.upsertMember(body.roomId, {
@@ -79,7 +112,9 @@ export class ChatGateway
     }
 
     client.join(`room:${body.roomId}`);
-    this.logger.log(`userId=${client.data.userId} joined room=${body.roomId}`);
+    this.logger.log(
+      `userId=${client.data.userId} joined room=${body.roomId} channelId=${client.data.channelId || '-'}`,
+    );
     return { ok: true, roomId: body.roomId };
   }
 
@@ -104,6 +139,7 @@ export class ChatGateway
     this.server.to(`room:${body.roomId}`).emit('room:message', {
       roomId: body.roomId,
       from: client.data.userId,
+      clientType: client.data.clientType,
       text: body.text,
       ts: Date.now(),
     });
@@ -114,10 +150,5 @@ export class ChatGateway
   @SubscribeMessage('ping')
   onPing(): { pong: number } {
     return { pong: Date.now() };
-  }
-
-  // 서버 측에서 특정 사용자에게 메시지 push (다른 모듈/cron 등에서 호출)
-  pushToUser(userId: string, event: string, payload: unknown): void {
-    this.server.to(`user:${userId}`).emit(event, payload);
   }
 }

@@ -31,19 +31,18 @@ $SSH "cd $REMOTE_DIR && tar -xzf /tmp/socket-server-bundle.tgz && rm /tmp/socket
 echo "==> install prod deps on host"
 $SSH "cd $REMOTE_DIR && npm install --omit=dev --no-audit --no-fund"
 
-echo "==> fetch JWT_SECRET from SSM into /etc/socket-server.env"
+echo "==> write /etc/socket-server.env"
 $SSH "sudo bash -lc '
-  JWT_SECRET=\$(aws ssm get-parameter --name /socket-server/jwt-secret --with-decryption --region us-east-1 --query Parameter.Value --output text)
   cat > /etc/socket-server.env <<EOF
 PORT=5020
 NODE_ENV=production
 RUNTIME=ec2
 GRACEFUL_SHUTDOWN_MS=60000
 CORS_ORIGINS=https://ai-dev-app.rorr.club
-JWT_SECRET=\$JWT_SECRET
+JWT_SECRET=rorr-socket-jwt-secret-2026
 
 # Database — Aurora PostgreSQL
-DB_HOST=database-1.cluster-cwjiw4y08fiq.us-east-1.rds.amazonaws.com
+DB_HOST=socket-server.cwjiw4y08fiq.us-east-1.rds.amazonaws.com
 DB_PORT=5432
 DB_NAME=postgres
 DB_USER=postgres

@@ -28,6 +28,7 @@ export class RoomsService {
 
   create(dto: CreateRoomDto): Promise<Room> {
     const room = this.roomRepo.create({
+      channel_id: dto.channel_id ?? null,
       name: dto.name,
       type: dto.type,
       owner_id: dto.owner_id,

@@ -1,5 +1,24 @@
 # EC2 단일 인스턴스 배포
 
+## CI/CD (GitHub Actions)
+
+워크플로우: `.github/workflows/deploy-socket-server.yml`  
+트리거: `main` 브랜치 push + `socket-server/**` 경로 변경 시 자동 배포
+
+### GitHub Environment Secrets 등록 (`dev`)
+
+GitHub repo → Settings → Environments → `dev` 생성 후 아래 3개 등록:
+
+| Secret 이름 | 값 형식 | 설명 |
+|---|---|---|
+| `EC2_SSH_KEY` | PEM 파일 전체 내용 (`-----BEGIN RSA PRIVATE KEY-----` 포함) | SSH 접속 키 |
+| `EC2_HOST` | `ec2-user@1.2.3.4` | SSH 접속 주소 |
+| `EC2_HOST_IP` | `1.2.3.4` | health check용 IP (EC2_HOST에서 user@ 제거한 것) |
+
+> 나중에 `rorr-backend-api-v2` prod 환경 추가 시: Environment `prod` 생성 + 동일 키 이름으로 secret 등록만 하면 됨
+
+---
+
 ## 사전 인프라 (1회 셋업)
 
 | 리소스 | 값 |
