@@ -158,7 +158,7 @@ jobs:
 
       - name: Health check EC2 #1
         run: |
-          sleep 5
+          sleep 15
           STATUS=$(curl -sf --max-time 10 \
             "http://${{ secrets.EC2_HOST_IP }}:5020/health" \
             -o /dev/null -w "%{http_code}" || echo "000")
