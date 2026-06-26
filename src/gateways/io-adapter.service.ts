@@ -17,7 +17,7 @@ export class IoAdapterService extends IoAdapter implements OnModuleInit {
     }
 
     const clusterNodes = [{ host: env.REDIS_HOST, port: env.REDIS_PORT }];
-    const pubClient = new Cluster(clusterNodes, { dnsLookup: (addr: string, cb: (err: Error | null, addr: string, family: number) => void) => cb(null, addr, 4), redisOptions: { tls: {} } });
+    const pubClient = new Cluster(clusterNodes, { dnsLookup: (addr: string, cb: (err: Error | null, addr: string, family: number) => void) => cb(null, addr, 4) });
     const subClient = pubClient.duplicate();
 
     await Promise.all([
