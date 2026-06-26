@@ -10,6 +10,7 @@ async function bootstrap(): Promise<void> {
 
   app.enableShutdownHooks();
 
+  logger.log(`REDIS_HOST=${env.REDIS_HOST ?? '(not set)'}`);
   if (env.REDIS_HOST) {
     const redisAdapter = new RedisIoAdapter(app);
     app.useWebSocketAdapter(redisAdapter);
