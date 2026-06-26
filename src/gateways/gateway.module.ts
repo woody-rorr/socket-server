@@ -15,5 +15,6 @@ import { ChannelsModule } from '../channels/channels.module';
     ChannelsModule,
   ],
   providers: [WsJwtGuard, SocketGateway],
+  exports: [IoAdapterModule],
 })
 export class GatewayModule {}
