@@ -10,18 +10,33 @@ export class RedisIoAdapter extends IoAdapter {
   private adapterConstructor: ReturnType<typeof createAdapter>;
 
   async connectToRedis(): Promise<void> {
-    const pubClient = new Redis({ host: env.REDIS_HOST, port: env.REDIS_PORT, connectTimeout: 5000, lazyConnect: true });
-    const subClient = pubClient.duplicate();
+    return new Promise((resolve) => {
+      const pubClient = new Redis({ host: env.REDIS_HOST, port: env.REDIS_PORT, connectTimeout: 5000 });
+      const subClient = pubClient.duplicate();
 
-    try {
-      await Promise.all([pubClient.connect(), subClient.connect()]);
-      this.adapterConstructor = createAdapter(pubClient, subClient);
-      this.logger.log(`Redis adapter connected: ${env.REDIS_HOST}:${env.REDIS_PORT}`);
-    } catch (err) {
-      this.logger.error(`Redis connection failed — running without adapter: ${(err as Error).message}`);
-      pubClient.disconnect();
-      subClient.disconnect();
-    }
+      let pubReady = false;
+      let subReady = false;
+
+      const tryApply = () => {
+        if (pubReady && subReady) {
+          this.adapterConstructor = createAdapter(pubClient, subClient);
+          this.logger.log(`Redis adapter connected: ${env.REDIS_HOST}:${env.REDIS_PORT}`);
+          resolve();
+        }
+      };
+
+      pubClient.once('ready', () => { pubReady = true; tryApply(); });
+      subClient.once('ready', () => { subReady = true; tryApply(); });
+
+      pubClient.once('error', (err) => {
+        this.logger.error(`Redis pub error: ${err.message}`);
+        resolve();
+      });
+      subClient.once('error', (err) => {
+        this.logger.error(`Redis sub error: ${err.message}`);
+        resolve();
+      });
+    });
   }
 
   createIOServer(port: number, options?: ServerOptions) {
