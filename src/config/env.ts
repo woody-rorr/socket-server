@@ -7,6 +7,9 @@ const schema = Joi.object({
   JWT_SECRET: Joi.string().required(),
   GRACEFUL_SHUTDOWN_MS: Joi.number().default(30_000),
   CORS_ORIGINS: Joi.string().default('*'),
+  // Redis
+  REDIS_HOST: Joi.string().optional(),
+  REDIS_PORT: Joi.number().default(6379),
   // Database (Aurora PostgreSQL)
   DB_HOST: Joi.string().optional(),
   DB_PORT: Joi.number().default(5432),
@@ -30,6 +33,8 @@ export const env = {
   JWT_SECRET: value.JWT_SECRET as string,
   GRACEFUL_SHUTDOWN_MS: value.GRACEFUL_SHUTDOWN_MS as number,
   CORS_ORIGINS: (value.CORS_ORIGINS as string).split(',').map((s) => s.trim()),
+  REDIS_HOST: value.REDIS_HOST as string | undefined,
+  REDIS_PORT: value.REDIS_PORT as number,
   DB_HOST: value.DB_HOST as string | undefined,
   DB_PORT: value.DB_PORT as number,
   DB_NAME: value.DB_NAME as string,

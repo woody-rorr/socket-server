@@ -80,6 +80,8 @@ jobs:
           DB_USER=${{ secrets.DB_USER }}
           DB_PASSWORD=${{ secrets.DB_PASSWORD }}
           DB_SSL=true
+          REDIS_HOST=${{ secrets.REDIS_HOST }}
+          REDIS_PORT=6379
           EOF
           chmod 600 /etc/socket-server.env'"
 
@@ -101,6 +103,8 @@ jobs:
           DB_USER=${{ secrets.DB_USER }}
           DB_PASSWORD=${{ secrets.DB_PASSWORD }}
           DB_SSL=true
+          REDIS_HOST=${{ secrets.REDIS_HOST }}
+          REDIS_PORT=6379
           EOF
           chmod 600 /etc/socket-server.env'"
 

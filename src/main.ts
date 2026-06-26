@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { IoAdapterService } from './gateways/io-adapter.service';
 import { env } from './config/env';
 
 async function bootstrap(): Promise<void> {
@@ -11,6 +12,9 @@ async function bootstrap(): Promise<void> {
   // 1) 기존 클라이언트에 재연결 권고 신호
   // 2) GRACEFUL_SHUTDOWN_MS 대기 후 종료
   app.enableShutdownHooks();
+
+  const ioAdapter = app.get(IoAdapterService);
+  app.useWebSocketAdapter(ioAdapter);
 
   const server = await app.listen(env.PORT);
   logger.log(`rorr-socket-server on :${env.PORT} (runtime=${env.RUNTIME})`);
