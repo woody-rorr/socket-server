@@ -11,9 +11,13 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
 
   if (env.REDIS_HOST) {
-    const redisAdapter = new RedisIoAdapter(app);
-    await redisAdapter.connectToRedis();
-    app.useWebSocketAdapter(redisAdapter);
+    try {
+      const redisAdapter = new RedisIoAdapter(app);
+      await redisAdapter.connectToRedis();
+      app.useWebSocketAdapter(redisAdapter);
+    } catch (err) {
+      logger.warn(`Redis adapter setup failed — continuing without: ${(err as Error).message}`);
+    }
   }
 
   const server = await app.listen(env.PORT);
