@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { ServerOptions } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
-import { Cluster } from 'ioredis';
+import Redis from 'ioredis';
 import { env } from '../config/env';
 
 @Injectable()
@@ -16,8 +16,7 @@ export class IoAdapterService extends IoAdapter implements OnModuleInit {
       return;
     }
 
-    const clusterNodes = [{ host: env.REDIS_HOST, port: env.REDIS_PORT }];
-    const pubClient = new Cluster(clusterNodes, { dnsLookup: (addr: string, cb: (err: Error | null, addr: string, family: number) => void) => cb(null, addr, 4) });
+    const pubClient = new Redis({ host: env.REDIS_HOST, port: env.REDIS_PORT });
     const subClient = pubClient.duplicate();
 
     await Promise.all([
