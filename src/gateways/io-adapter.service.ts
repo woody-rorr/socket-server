@@ -19,10 +19,16 @@ export class IoAdapterService extends IoAdapter implements OnModuleInit {
     const pubClient = new Redis({ host: env.REDIS_HOST, port: env.REDIS_PORT });
     const subClient = pubClient.duplicate();
 
-    pubClient.once('ready', () => {
+    const applyAdapter = () => {
       this.redisAdapter = createAdapter(pubClient, subClient);
       this.logger.log(`Redis adapter connected: ${env.REDIS_HOST}:${env.REDIS_PORT}`);
-    });
+    };
+
+    if (pubClient.status === 'ready') {
+      applyAdapter();
+    } else {
+      pubClient.once('ready', applyAdapter);
+    }
 
     pubClient.once('error', (err) => {
       this.logger.error(`Redis connection failed — adapter disabled: ${err.message}`);
