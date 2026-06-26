@@ -16,16 +16,17 @@ export class IoAdapterService extends IoAdapter implements OnModuleInit {
       return;
     }
 
-    const pubClient = new Redis({ host: env.REDIS_HOST, port: env.REDIS_PORT });
-    const subClient = pubClient.duplicate();
+    try {
+      const pubClient = new Redis({ host: env.REDIS_HOST, port: env.REDIS_PORT, connectTimeout: 5000, lazyConnect: true });
+      const subClient = pubClient.duplicate();
 
-    await Promise.all([
-      new Promise<void>((res) => pubClient.once('ready', res)),
-      new Promise<void>((res) => subClient.once('ready', res)),
-    ]);
+      await Promise.all([pubClient.connect(), subClient.connect()]);
 
-    this.redisAdapter = createAdapter(pubClient, subClient);
-    this.logger.log(`Redis adapter connected: ${env.REDIS_HOST}:${env.REDIS_PORT}`);
+      this.redisAdapter = createAdapter(pubClient, subClient);
+      this.logger.log(`Redis adapter connected: ${env.REDIS_HOST}:${env.REDIS_PORT}`);
+    } catch (err) {
+      this.logger.error(`Redis connection failed — adapter disabled: ${(err as Error).message}`);
+    }
   }
 
   createIOServer(port: number, options?: ServerOptions) {
