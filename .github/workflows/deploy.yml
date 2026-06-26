@@ -48,14 +48,21 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy.pem
           chmod 600 ~/.ssh/deploy.pem
 
-      - name: Upload bundle to EC2
+      - name: Upload bundle to EC2 #1
         run: |
           scp -i ~/.ssh/deploy.pem \
             -o StrictHostKeyChecking=accept-new \
             /tmp/socket-server-bundle.tgz \
             ${{ secrets.EC2_HOST }}:/tmp/socket-server-bundle.tgz
 
-      - name: Write env file on EC2
+      - name: Upload bundle to EC2 #2
+        run: |
+          scp -i ~/.ssh/deploy.pem \
+            -o StrictHostKeyChecking=accept-new \
+            /tmp/socket-server-bundle.tgz \
+            ${{ secrets.EC2_HOST_2 }}:/tmp/socket-server-bundle.tgz
+
+      - name: Write env file on EC2 #1
         run: |
           ssh -i ~/.ssh/deploy.pem \
             -o StrictHostKeyChecking=accept-new \
@@ -76,7 +83,28 @@ jobs:
           EOF
           chmod 600 /etc/socket-server.env'"
 
-      - name: Deploy on EC2
+      - name: Write env file on EC2 #2
+        run: |
+          ssh -i ~/.ssh/deploy.pem \
+            -o StrictHostKeyChecking=accept-new \
+            ${{ secrets.EC2_HOST_2 }} \
+            "sudo bash -c 'cat > /etc/socket-server.env << EOF
+          PORT=5020
+          NODE_ENV=${{ vars.NODE_ENV }}
+          RUNTIME=ec2
+          GRACEFUL_SHUTDOWN_MS=60000
+          CORS_ORIGINS=${{ vars.CORS_ORIGINS }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          DB_HOST=${{ secrets.DB_HOST }}
+          DB_PORT=5432
+          DB_NAME=postgres
+          DB_USER=${{ secrets.DB_USER }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_SSL=true
+          EOF
+          chmod 600 /etc/socket-server.env'"
+
+      - name: Deploy on EC2 #1
         run: |
           ssh -i ~/.ssh/deploy.pem \
             -o StrictHostKeyChecking=accept-new \
@@ -97,14 +125,46 @@ jobs:
             sudo systemctl restart socket-server
             sleep 3
             sudo systemctl is-active socket-server
-            echo "==> Deploy complete"
+            echo "==> Deploy complete EC2 #1"
           REMOTE
 
-      - name: Health check
+      - name: Deploy on EC2 #2
+        run: |
+          ssh -i ~/.ssh/deploy.pem \
+            -o StrictHostKeyChecking=accept-new \
+            ${{ secrets.EC2_HOST_2 }} \
+            "bash -s" << 'REMOTE'
+            set -euo pipefail
+            REMOTE_DIR=/opt/socket-server
+
+            sudo mkdir -p $REMOTE_DIR
+            sudo chown -R ec2-user:ec2-user $REMOTE_DIR
+
+            cd $REMOTE_DIR
+            tar -xzf /tmp/socket-server-bundle.tgz
+            rm /tmp/socket-server-bundle.tgz
+
+            npm install --omit=dev --no-audit --no-fund
+
+            sudo systemctl restart socket-server
+            sleep 3
+            sudo systemctl is-active socket-server
+            echo "==> Deploy complete EC2 #2"
+          REMOTE
+
+      - name: Health check EC2 #1
         run: |
           sleep 5
           STATUS=$(curl -sf --max-time 10 \
             "http://${{ secrets.EC2_HOST_IP }}:5020/health" \
             -o /dev/null -w "%{http_code}" || echo "000")
-          echo "Health check status: $STATUS"
+          echo "Health check #1 status: $STATUS"
+          [ "$STATUS" = "200" ] && echo "OK" || (echo "FAIL" && exit 1)
+
+      - name: Health check EC2 #2
+        run: |
+          STATUS=$(curl -sf --max-time 10 \
+            "http://${{ secrets.EC2_HOST_IP_2 }}:5020/health" \
+            -o /dev/null -w "%{http_code}" || echo "000")
+          echo "Health check #2 status: $STATUS"
           [ "$STATUS" = "200" ] && echo "OK" || (echo "FAIL" && exit 1)
