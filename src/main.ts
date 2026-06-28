@@ -13,10 +13,8 @@ async function bootstrap(): Promise<void> {
   logger.log(`REDIS_HOST=${env.REDIS_HOST ?? '(not set)'}`);
   if (env.REDIS_HOST) {
     const redisAdapter = new RedisIoAdapter(app);
+    await redisAdapter.connectToRedis();
     app.useWebSocketAdapter(redisAdapter);
-    redisAdapter.connectToRedis().catch((err) => {
-      logger.warn(`Redis adapter setup failed: ${(err as Error).message}`);
-    });
   }
 
   const server = await app.listen(env.PORT);
