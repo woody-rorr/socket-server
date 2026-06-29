@@ -82,6 +82,7 @@ jobs:
           DB_SSL=true
           REDIS_HOST=${{ secrets.REDIS_HOST }}
           REDIS_PORT=6379
+          INTERNAL_API_SECRET=${{ secrets.INTERNAL_API_SECRET }}
           EOF
           chmod 600 /etc/socket-server.env'"
 
@@ -105,6 +106,7 @@ jobs:
           DB_SSL=true
           REDIS_HOST=${{ secrets.REDIS_HOST }}
           REDIS_PORT=6379
+          INTERNAL_API_SECRET=${{ secrets.INTERNAL_API_SECRET }}
           EOF
           chmod 600 /etc/socket-server.env'"
 
