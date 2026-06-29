@@ -10,6 +10,7 @@ const schema = Joi.object({
   // Redis
   REDIS_HOST: Joi.string().optional(),
   REDIS_PORT: Joi.number().default(6379),
+  INTERNAL_API_SECRET: Joi.string().optional(),
   // Database (Aurora PostgreSQL)
   DB_HOST: Joi.string().optional(),
   DB_PORT: Joi.number().default(5432),
@@ -35,6 +36,7 @@ export const env = {
   CORS_ORIGINS: (value.CORS_ORIGINS as string).split(',').map((s) => s.trim()),
   REDIS_HOST: value.REDIS_HOST as string | undefined,
   REDIS_PORT: value.REDIS_PORT as number,
+  INTERNAL_API_SECRET: value.INTERNAL_API_SECRET as string | undefined,
   DB_HOST: value.DB_HOST as string | undefined,
   DB_PORT: value.DB_PORT as number,
   DB_NAME: value.DB_NAME as string,

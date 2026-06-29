@@ -15,6 +15,7 @@ import { env } from '../config/env';
 import { RoomsService } from '../rooms/rooms.service';
 import { ChannelsService } from '../channels/channels.service';
 import { AuthedSocket, ClientType, WsJwtGuard } from './ws-jwt.guard';
+import { SocketStateService } from './socket-state.service';
 
 @WebSocketGateway({
   cors: { origin: env.CORS_ORIGINS, credentials: true },
@@ -35,6 +36,7 @@ export class SocketGateway
     private readonly auth: WsJwtGuard,
     private readonly roomsService: RoomsService,
     private readonly channelsService: ChannelsService,
+    private readonly socketState: SocketStateService,
   ) {}
 
   afterInit(server: Server): void {
@@ -74,9 +76,11 @@ export class SocketGateway
       channelId: identity.channelId,
       ts: Date.now(),
     });
+    void this.socketState.addConnection(client.id, identity);
   }
 
   handleDisconnect(client: Socket): void {
+    void this.socketState.removeConnection(client.id);
     const { userId, clientType, channelId } = (client as AuthedSocket).data ?? {};
     this.logger.log(
       `disconnect ${client.id} userId=${userId ?? '-'} clientType=${clientType ?? '-'} channelId=${channelId ?? '-'}`,
@@ -161,7 +165,8 @@ export class SocketGateway
 
   @UseGuards(WsJwtGuard)
   @SubscribeMessage('ping')
-  onPing(): { pong: number } {
+  onPing(@ConnectedSocket() client: AuthedSocket): { pong: number } {
+    void this.socketState.refreshTTL(client.id);
     return { pong: Date.now() };
   }
 }
